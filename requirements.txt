@@ -1,0 +1,27 @@
+# LangChain
+langchain>=0.2.0
+langchain-community>=0.2.0
+langchain-openai>=0.1.0
+langchain-core>=0.2.0
+langchain-text-splitters>=0.2.0
+
+# Vector Store
+chromadb>=0.4.0
+
+# Embeddings & Evaluator
+sentence-transformers>=2.2.0
+transformers>=4.30.0
+torch>=2.0.0
+
+# PDF
+pypdf>=3.17.0
+
+# Web Search
+duckduckgo-search>=4.0.0
+
+# API
+requests>=2.31.0
+python-dotenv>=1.0.0
+
+# UI
+streamlit>=1.30.0
