@@ -16,8 +16,8 @@ torch>=2.0.0
 # PDF
 pypdf>=3.17.0
 
-# Web Search
-duckduckgo-search>=4.0.0
+# Web Search (Tavily via langchain-community)
+tavily-python>=0.3.0
 
 # API
 requests>=2.31.0

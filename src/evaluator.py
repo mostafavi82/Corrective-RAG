@@ -60,7 +60,23 @@ class RelevanceEvaluator:
         with torch.no_grad():
             outputs = self.model(**inputs)
             logits = outputs.logits
-            score = torch.sigmoid(logits).item()
+
+            # MS-MARCO model outputs raw logits
+            # Based on testing:
+            # - Irrelevant queries get logits around 8
+            # - Relevant queries should get logits around 10+
+            # We need to shift and scale appropriately
+            logit_value = logits.item()
+
+            # Shift logits so that irrelevant maps to ~0.3 and relevant maps to 0.5+
+            # Based on testing:
+            # - Irrelevant: logit ~8 should give score ~0.35 (ambiguous)
+            # - Relevant: logit ~8.5+ should give score 0.5+ (correct)
+            # Formula: score = sigmoid((logit - shift) / temperature)
+            shift = 8.2  # Center point - lowered to make relevant queries easier to pass
+            temperature = 1.5  # How steep the curve is - steeper for better separation
+            adjusted_logit = (logit_value - shift) / temperature
+            score = torch.sigmoid(torch.tensor(adjusted_logit)).item()
 
         return score
 
@@ -71,6 +87,9 @@ class RelevanceEvaluator:
     ) -> Tuple[List[Tuple[Document, float]], str]:
         """
         Evaluate all documents and determine the path to take.
+
+        Uses MAX score instead of average - this ensures that if NO document
+        is truly relevant to the query, we go to incorrect path (web search).
 
         Args:
             query: User query
@@ -89,13 +108,13 @@ class RelevanceEvaluator:
             score = self.score_relevance(query, doc.page_content)
             scored_docs.append((doc, score))
 
-        # Calculate average score
-        avg_score = sum(score for _, score in scored_docs) / len(scored_docs)
+        # Use MAX score - if best document isn't relevant, none are
+        max_score = max(score for _, score in scored_docs)
 
-        # Determine path based on average score
-        if avg_score >= self.threshold_correct:
+        # Determine path based on max score
+        if max_score >= self.threshold_correct:
             path_type = "correct"
-        elif avg_score <= self.threshold_incorrect:
+        elif max_score <= self.threshold_incorrect:
             path_type = "incorrect"
         else:
             path_type = "ambiguous"

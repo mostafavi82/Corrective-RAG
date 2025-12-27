@@ -1,8 +1,23 @@
 """Corrective RAG paths: Correct, Incorrect, and Ambiguous."""
 
+import os
 from typing import List, Tuple
 from langchain_core.documents import Document
-from duckduckgo_search import DDGS
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import StrOutputParser
+from langchain_openai import ChatOpenAI
+from langchain_community.tools.tavily_search import TavilySearchResults
+from dotenv import load_dotenv
+
+load_dotenv()
+
+
+def safe_print(text):
+    """Print text safely, handling encoding errors."""
+    try:
+        print(text)
+    except UnicodeEncodeError:
+        print(text.encode('ascii', 'replace').decode('ascii'))
 
 
 class CorrectivePaths:
@@ -10,7 +25,27 @@ class CorrectivePaths:
 
     def __init__(self):
         """Initialize corrective paths handler."""
-        pass
+        # Initialize Tavily search
+        self.web_search_tool = TavilySearchResults(k=3)
+
+        # Initialize question rewriter
+        self.llm = ChatOpenAI(
+            model="gpt-4o-mini",
+            temperature=0,
+            openai_api_key=os.getenv("METIS_API_KEY"),
+            openai_api_base=os.getenv("METIS_BASE_URL")
+        )
+
+        system = """You are a question re-writer that converts an input question to a better version that is optimized for web search. Look at the input and try to reason about the underlying semantic intent / meaning."""
+
+        self.rewrite_prompt = ChatPromptTemplate.from_messages([
+            ("system", system),
+            ("human", "Here is the initial question: \n\n {question} \n Formulate an improved question."),
+        ])
+
+        self.question_rewriter = self.rewrite_prompt | self.llm | StrOutputParser()
+
+        safe_print("[OK] Initialized corrective paths with Tavily search")
 
     def correct_path(
         self,
@@ -21,11 +56,6 @@ class CorrectivePaths:
         """
         Correct path: Documents are relevant, filter and use them.
 
-        Process:
-        1. Decompose: Split scored documents
-        2. Filter: Keep only highly relevant documents
-        3. Recompose: Combine filtered documents
-
         Args:
             query: Original query
             scored_docs: List of (document, score) tuples
@@ -34,18 +64,15 @@ class CorrectivePaths:
         Returns:
             Tuple of (filtered documents, knowledge source)
         """
-        # DECOMPOSE: Already have individual documents with scores
-
-        # FILTER: Keep documents above threshold
+        # Filter documents with score >= min_score
         filtered_docs = [
             doc for doc, score in scored_docs
             if score >= min_score
         ]
 
-        # RECOMPOSE: Documents are ready to use
         knowledge_source = f"vector_db (filtered {len(filtered_docs)}/{len(scored_docs)} documents)"
 
-        print(f"[OK] Correct path: Filtered {len(filtered_docs)}/{len(scored_docs)} relevant documents")
+        safe_print(f"[OK] Correct path: Filtered {len(filtered_docs)}/{len(scored_docs)} relevant documents")
 
         return filtered_docs, knowledge_source
 
@@ -64,33 +91,52 @@ class CorrectivePaths:
         Returns:
             Tuple of (web search documents, knowledge source)
         """
-        print(f"[OK] Incorrect path: Performing web search for: '{query}'")
+        safe_print(f"[OK] Incorrect path: Performing web search")
 
         try:
-            # Perform web search using DuckDuckGo
-            ddgs = DDGS()
-            results = ddgs.text(query, max_results=max_results)
+            # Rewrite question for better web search
+            safe_print(f"[OK] Rewriting question for web search...")
+            rewritten_query = self.question_rewriter.invoke({"question": query})
+            safe_print(f"[OK] Rewritten query: {rewritten_query}")
+
+            # Perform web search using Tavily
+            results = self.web_search_tool.invoke({"query": rewritten_query})
+
+            safe_print(f"[DEBUG] Tavily results type: {type(results)}")
+            safe_print(f"[DEBUG] Tavily results: {results[:500] if isinstance(results, str) else results}")
 
             # Convert results to documents
             web_docs = []
-            for result in results:
+            for result in results[:max_results]:
+                # Handle both dict and string results
+                if isinstance(result, dict):
+                    content = result.get('content', '')
+                    title = result.get('title', '')
+                    url = result.get('url', '')
+                elif isinstance(result, str):
+                    content = result
+                    title = ''
+                    url = ''
+                else:
+                    continue
+
                 doc = Document(
-                    page_content=result.get('body', ''),
+                    page_content=content,
                     metadata={
-                        'title': result.get('title', ''),
-                        'url': result.get('href', ''),
+                        'title': title,
+                        'url': url,
                         'source': 'web_search'
                     }
                 )
                 web_docs.append(doc)
 
             knowledge_source = f"web_search ({len(web_docs)} results)"
-            print(f"[OK] Found {len(web_docs)} web results")
+            safe_print(f"[OK] Found {len(web_docs)} web results")
 
             return web_docs, knowledge_source
 
         except Exception as e:
-            print(f"[FAIL] Web search failed: {e}")
+            safe_print(f"[FAIL] Web search failed: {e}")
             return [], "web_search (failed)"
 
     def ambiguous_path(
@@ -113,7 +159,7 @@ class CorrectivePaths:
         Returns:
             Tuple of (hybrid documents, knowledge source)
         """
-        print(f"[OK] Ambiguous path: Using hybrid approach")
+        safe_print(f"[OK] Ambiguous path: Using hybrid approach")
 
         # Filter relevant documents from vector DB
         filtered_docs, _ = self.correct_path(query, scored_docs, min_score)
@@ -129,7 +175,7 @@ class CorrectivePaths:
             f"web_search: {len(web_docs)})"
         )
 
-        print(f"[OK] Hybrid: {len(filtered_docs)} filtered docs + {len(web_docs)} web results")
+        safe_print(f"[OK] Hybrid: {len(filtered_docs)} filtered docs + {len(web_docs)} web results")
 
         return hybrid_docs, knowledge_source
 

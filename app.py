@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from langchain_community.document_loaders import PyPDFLoader
 from src.vector_store import VectorStoreManager
-from src.evaluator import RelevanceEvaluator
+from src.llm_evaluator import LLMRelevanceEvaluator
 from src.corrective_rag import CorrectiveRAG
 
 
@@ -79,13 +79,13 @@ def initialize_rag():
             vector_store = VectorStoreManager(
                 collection_name="streamlit_chat",
                 embedding_model="text-embedding-3-small",
-                use_avalai=True,
+                embedding_provider="metis",
                 chunk_size=800,
                 chunk_overlap=100
             )
 
-            evaluator = RelevanceEvaluator(
-                model_name="cross-encoder/ms-marco-MiniLM-L-6-v2",
+            evaluator = LLMRelevanceEvaluator(
+                model_name="qwen2.5-vl-3b-instruct",
                 threshold_correct=0.5,
                 threshold_incorrect=0.3
             )
@@ -187,10 +187,11 @@ def main():
                             path_emoji = "🟡"
                             path_color = "#ff9800"
 
+                        max_score = metadata.get('max_relevance_score', metadata['avg_relevance_score'])
                         st.markdown(f"""
                         <div class="metadata-box">
                             <strong>{path_emoji} Path:</strong> {path}<br>
-                            <strong>📊 Relevance:</strong> {metadata['avg_relevance_score']:.3f}<br>
+                            <strong>📊 Max Score:</strong> {max_score:.3f} (avg: {metadata['avg_relevance_score']:.3f})<br>
                             <strong>📁 Source:</strong> {metadata['knowledge_source']}<br>
                             <strong>📄 Docs:</strong> {metadata['num_documents']}
                         </div>
@@ -225,10 +226,11 @@ def main():
                         else:
                             path_emoji = "🟡"
 
+                        max_score = result.get('max_relevance_score', result['avg_relevance_score'])
                         st.markdown(f"""
                         <div class="metadata-box">
                             <strong>{path_emoji} Path:</strong> {path}<br>
-                            <strong>📊 Relevance:</strong> {result['avg_relevance_score']:.3f}<br>
+                            <strong>📊 Max Score:</strong> {max_score:.3f} (avg: {result['avg_relevance_score']:.3f})<br>
                             <strong>📁 Source:</strong> {result['knowledge_source']}<br>
                             <strong>📄 Docs:</strong> {result['num_documents']}
                         </div>
@@ -240,6 +242,7 @@ def main():
                 "content": result['answer'],
                 "metadata": {
                     "path_type": result['path_type'],
+                    "max_relevance_score": result.get('max_relevance_score', result['avg_relevance_score']),
                     "avg_relevance_score": result['avg_relevance_score'],
                     "knowledge_source": result['knowledge_source'],
                     "num_documents": result['num_documents']

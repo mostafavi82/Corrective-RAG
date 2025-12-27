@@ -195,8 +195,9 @@ Answer: Provide a detailed and accurate answer based on the context. If the cont
         # Step 2: Evaluate
         safe_print("\n[2/4] Evaluating relevance...")
         scored_docs, path_type = self.evaluate(question, documents)
+        max_score = max((score for _, score in scored_docs), default=0)
         avg_score = sum(score for _, score in scored_docs) / len(scored_docs) if scored_docs else 0
-        safe_print(f"[OK] Path determined: {path_type.upper()} (avg score: {avg_score:.3f})")
+        safe_print(f"[OK] Path determined: {path_type.upper()} (max score: {max_score:.3f}, avg: {avg_score:.3f})")
 
         # Step 3: Corrective Action
         safe_print(f"\n[3/4] Applying corrective action ({path_type})...")
@@ -219,6 +220,7 @@ Answer: Provide a detailed and accurate answer based on the context. If the cont
                 "path_type": path_type,
                 "knowledge_source": knowledge_source,
                 "num_documents": len(final_docs),
+                "max_relevance_score": max_score,
                 "avg_relevance_score": avg_score,
                 "retrieved_docs": len(documents),
                 "documents": final_docs

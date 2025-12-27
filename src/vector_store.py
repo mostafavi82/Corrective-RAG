@@ -7,6 +7,7 @@ from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
 from .avalai_embeddings import AvalAIEmbeddings
+from .metis_embeddings import MetisEmbeddings
 
 # Default persist directory
 DEFAULT_PERSIST_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "chroma_db")
@@ -19,7 +20,7 @@ class VectorStoreManager:
         self,
         collection_name: str = "corrective_rag",
         embedding_model: str = "text-embedding-3-small",
-        use_avalai: bool = True,
+        embedding_provider: str = "metis",
         chunk_size: int = 500,
         chunk_overlap: int = 50,
         persist_directory: str = None
@@ -29,8 +30,8 @@ class VectorStoreManager:
 
         Args:
             collection_name: Name of the collection in ChromaDB
-            embedding_model: Embedding model name (Aval AI or HuggingFace)
-            use_avalai: Use Aval AI embeddings (default: True)
+            embedding_model: Embedding model name
+            embedding_provider: "metis", "avalai", or "huggingface"
             chunk_size: Size of text chunks
             chunk_overlap: Overlap between chunks
             persist_directory: Directory to persist ChromaDB (default: ./chroma_db)
@@ -42,7 +43,10 @@ class VectorStoreManager:
         os.makedirs(self.persist_directory, exist_ok=True)
 
         # Choose embedding provider
-        if use_avalai:
+        if embedding_provider == "metis":
+            self.embeddings = MetisEmbeddings(model=embedding_model)
+            print(f"[OK] Using Metis AI embeddings: {embedding_model}")
+        elif embedding_provider == "avalai":
             self.embeddings = AvalAIEmbeddings(model=embedding_model)
             print(f"[OK] Using Aval AI embeddings: {embedding_model}")
         else:
